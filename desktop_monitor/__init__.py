@@ -11,9 +11,11 @@ __author__ = "Desktop Monitor"
 from .config import Config
 from .audio_system import DesktopAudioMonitor
 from .vision_system import DesktopVisionMonitor
+from .speech_music_classifier import SpeechMusicClassifier
 
 __all__ = [
     'Config',
     'DesktopAudioMonitor', 
-    'DesktopVisionMonitor'
+    'DesktopVisionMonitor',
+    'SpeechMusicClassifier'
 ]

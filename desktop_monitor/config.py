@@ -23,6 +23,12 @@ class Config:
     
     # Audio classification
     AUTO_DETECT_AUDIO_TYPE = True  # Automatically detect speech vs music
+    DEBUG_CLASSIFIER = False  # Enable detailed classifier debugging
+    
+    # Classifier tuning parameters
+    CLASSIFIER_HISTORY_SIZE = 5  # Number of classifications to consider for smoothing
+    SPEECH_THRESHOLD = 0.6  # Fraction needed to classify as speech
+    MUSIC_THRESHOLD = 0.4   # Fraction needed to classify as music
     
     # Vision Configuration
     ENABLE_VISION_MONITORING = True
@@ -30,7 +36,7 @@ class Config:
     
     # Monitor area (left, top, width, height) - captures entire screen by default
     # You can customize this to capture specific areas
-    MONITOR_AREA = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+    MONITOR_AREA = {"left": 100, "top": 100, "width": 1528, "height": 917}
     
     # Vision models
     VISION_MODEL = "llava:13b"

@@ -14,102 +14,8 @@ from queue import Queue
 from threading import Thread, Event
 from scipy import signal
 
-class SpeechMusicClassifier:
-    """Enhanced classifier to detect speech vs music"""
-    
-    def __init__(self):
-        self.current_type = "speech"
-        self.history = []
-        self.max_history = 5
-        self.min_confidence = 0.2
-        
-    def classify(self, audio_chunk):
-        """Classify audio chunk as speech or music"""
-        try:
-            # Convert to numpy if tensor
-            if hasattr(audio_chunk, 'cpu'):
-                audio_chunk = audio_chunk.cpu().numpy()
-                
-            # Normalize the audio
-            audio_chunk = audio_chunk / (np.max(np.abs(audio_chunk)) + 1e-10)
-            
-            # Extract features
-            zero_crossings = np.sum(np.diff(np.signbit(audio_chunk)) != 0)
-            zc_rate = zero_crossings / len(audio_chunk)
-            
-            # Get frequency spectrum
-            spectrum = np.abs(np.fft.rfft(audio_chunk))
-            freqs = np.fft.rfftfreq(len(audio_chunk), 1/16000)
-            
-            # Analyze energy in different frequency bands
-            bands = [0, 150, 300, 1000, 2000, 3000, 5000, 8000, 12000]
-            band_energy = []
-            
-            for i in range(len(bands)-1):
-                mask = (freqs >= bands[i]) & (freqs < bands[i+1])
-                band_energy.append(np.sum(spectrum[mask]))
-                
-            # Normalize band energies
-            total_energy = sum(band_energy) + 1e-10
-            band_energy_ratio = [e/total_energy for e in band_energy]
-            
-            # Calculate spectral centroid
-            centroid = np.sum(freqs * spectrum) / (np.sum(spectrum) + 1e-10)
-            normalized_centroid = centroid / 8000  # Normalize by Nyquist frequency
-            
-            # Decision logic
-            speech_features = 0
-            music_features = 0
-            
-            # Zero crossing rate analysis
-            if 0.01 < zc_rate < 0.1:
-                speech_features += 1
-            elif zc_rate >= 0.1:
-                music_features += 1.5
-                
-            # Energy in speech band (1000-3000 Hz)
-            speech_band_energy = band_energy_ratio[3] + band_energy_ratio[4]
-            high_freq_energy = sum(band_energy_ratio[5:])
-            
-            if speech_band_energy > 0.4:
-                speech_features += 1
-            
-            if high_freq_energy > 0.25:
-                music_features += 1.5
-                
-            # Spectral centroid
-            if normalized_centroid > 0.2:
-                music_features += 1
-                
-            # Make decision
-            if speech_features > music_features:
-                detected_type = "speech"
-                confidence = min(0.5 + 0.1 * speech_features, 0.9)
-            else:
-                detected_type = "music"
-                confidence = min(0.5 + 0.1 * music_features, 0.9)
-                
-            # Update history
-            self.history.append(detected_type)
-            if len(self.history) > self.max_history:
-                self.history.pop(0)
-                
-            # Change type based on consensus
-            speech_count = self.history.count("speech")
-            music_count = self.history.count("music")
-            
-            if speech_count >= 0.6 * len(self.history) and self.current_type != "speech":
-                print(f"[AUDIO] Audio type changed: {self.current_type.upper()} → SPEECH")
-                self.current_type = "speech"
-            elif music_count >= 0.4 * len(self.history) and self.current_type != "music":
-                print(f"[AUDIO] Audio type changed: {self.current_type.upper()} → MUSIC")
-                self.current_type = "music"
-                
-            return self.current_type, confidence
-            
-        except Exception as e:
-            print(f"[AUDIO] Classification error: {str(e)}")
-            return self.current_type, 0.5
+# Import the standalone classifier
+from .speech_music_classifier import SpeechMusicClassifier
 
 class AudioProcessor:
     """Processes audio chunks for transcription"""
@@ -317,7 +223,10 @@ class DesktopAudioMonitor:
             raise
             
         # Initialize classifier and processor
-        self.classifier = SpeechMusicClassifier()
+        self.classifier = SpeechMusicClassifier(
+            debug=config.DEBUG_CLASSIFIER if hasattr(config, 'DEBUG_CLASSIFIER') else False,
+            sample_rate=config.FS
+        )
         self.processor = AudioProcessor(self)
         
     def audio_callback(self, indata, frames, timestamp, status):
