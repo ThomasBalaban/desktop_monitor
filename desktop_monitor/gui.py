@@ -11,8 +11,8 @@ from tkinter import ttk, scrolledtext
 import threading
 import time
 from datetime import datetime, timedelta
-from PIL import Image, ImageTk
-import numpy as np
+from PIL import Image, ImageTk # type: ignore
+import numpy as np # type: ignore
 from pathlib import Path
 import sys
 import io
