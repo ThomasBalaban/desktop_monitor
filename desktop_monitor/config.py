@@ -1,11 +1,11 @@
 """
-Configuration settings for Desktop Monitor
+Enhanced Configuration settings for Desktop Monitor with Advanced YOLO Summaries
 """
 import os
 import torch # type: ignore
 
 class Config:
-    """Configuration class for Desktop Monitor"""
+    """Enhanced Configuration class for Desktop Monitor"""
     
     # Audio Configuration
     FS = 16000  # Sample rate
@@ -48,13 +48,26 @@ class Config:
     SUMMARY_INTERVAL = 30  # Generate summary every N seconds
     FRAME_RESIZE = (800, 600)  # Resize frames for processing
     
-    # YOLO Configuration
+    # Enhanced YOLO Configuration
     YOLO_MODEL = "yolov8n.pt"  # Options: yolov8n.pt (fastest), yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt (most accurate)
     YOLO_CONFIDENCE = 0.5  # Confidence threshold for detections (0.0-1.0)
     YOLO_FPS = 2.0  # Target FPS for YOLO processing (lower = less CPU usage)
     YOLO_INPUT_SIZE = 640  # Max input size for YOLO (smaller = faster)
     YOLO_ENABLE_TRACKING = True  # Enable object tracking across frames
     YOLO_LOG_HIGH_CONFIDENCE = 0.8  # Log detections above this confidence
+    
+    # Enhanced YOLO Summary Configuration
+    YOLO_SUMMARY_STYLE = "scene"  # Options: basic, spatial, confidence, scene, prominence, temporal
+    YOLO_VERBOSE_SUMMARIES = False  # Show all summary types in output
+    YOLO_SUMMARY_ROTATION = False  # Rotate through different summary styles
+    YOLO_ENHANCED_LOGGING = True  # Enable enhanced logging with spatial info
+    
+    # Activity Detection Configuration
+    YOLO_ACTIVITY_DETECTION = True  # Enable activity pattern detection
+    YOLO_ACTIVITY_HISTORY_FRAMES = 10  # Number of frames to analyze for patterns
+    YOLO_MOVEMENT_THRESHOLD = 50  # Pixel distance for rapid movement detection
+    YOLO_WORKSPACE_DISTANCE = 300  # Distance to consider person "near" workspace
+    YOLO_LOG_ACTIVITIES = True  # Log detected activities separately
     
     # Integration Settings
     YOLO_TRIGGER_LLM = True  # Use YOLO detections to trigger LLM vision analysis
@@ -99,11 +112,44 @@ class Config:
                 }
                 print(f"Auto-detected screen resolution: {screen_width}x{screen_height}")
             except Exception:
-                print("Using default screen resolution: 1920x1080")
+                print("Using default screen resolution: 1220x686")
         
-        print(f"Configuration loaded:")
+        # Validate YOLO summary style
+        valid_styles = ['basic', 'spatial', 'confidence', 'scene', 'prominence', 'temporal']
+        if self.YOLO_SUMMARY_STYLE not in valid_styles:
+            print(f"Warning: Invalid YOLO_SUMMARY_STYLE '{self.YOLO_SUMMARY_STYLE}'. Using 'scene'.")
+            self.YOLO_SUMMARY_STYLE = 'scene'
+        
+        print(f"Enhanced Configuration loaded:")
         print(f"  Audio: Whisper {self.MODEL_SIZE} on {self.DEVICE}")
         print(f"  LLM Vision: {self.VISION_MODEL}")
         if self.ENABLE_YOLO_MONITORING:
-            print(f"  YOLO: {self.YOLO_MODEL} (confidence: {self.YOLO_CONFIDENCE}, fps: {self.YOLO_FPS})")
+            print(f"  Enhanced YOLO: {self.YOLO_MODEL} (confidence: {self.YOLO_CONFIDENCE}, fps: {self.YOLO_FPS})")
+            print(f"  YOLO Summary Style: {self.YOLO_SUMMARY_STYLE}")
+            if self.YOLO_VERBOSE_SUMMARIES:
+                print(f"  YOLO Verbose Summaries: enabled")
+            if self.YOLO_SUMMARY_ROTATION:
+                print(f"  YOLO Summary Rotation: enabled")
         print(f"  Monitor area: {self.MONITOR_AREA}")
+    
+    def set_yolo_summary_style(self, style: str) -> bool:
+        """Dynamically change YOLO summary style"""
+        valid_styles = ['basic', 'spatial', 'confidence', 'scene', 'prominence', 'temporal']
+        if style in valid_styles:
+            self.YOLO_SUMMARY_STYLE = style
+            print(f"YOLO summary style changed to: {style}")
+            return True
+        else:
+            print(f"Invalid style: {style}. Valid options: {', '.join(valid_styles)}")
+            return False
+    
+    def get_summary_style_info(self) -> dict:
+        """Get information about available summary styles"""
+        return {
+            'basic': 'Simple object counts (e.g., "2 persons, 1 laptop")',
+            'spatial': 'Objects with screen positions (e.g., "person (center), laptop (top-left)")',
+            'confidence': 'Objects with confidence levels (e.g., "person (0.85-high)")',
+            'scene': 'Contextual scene analysis (e.g., "Scene: active_workspace | person using laptop")',
+            'prominence': 'Objects by visual importance (e.g., "Dominated by: laptop (large-4.2%)")',
+            'temporal': 'Changes over time (e.g., "Current: 2 persons | Changes: +1 person")'
+        }
