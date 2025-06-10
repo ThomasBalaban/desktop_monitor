@@ -200,27 +200,27 @@ def check_dependencies():
     missing_deps = []
     
     try:
-        import ultralytics
+        import ultralytics # type: ignore
     except ImportError:
         missing_deps.append("ultralytics")
     
     try:
-        import whisper
+        import whisper # type: ignore
     except ImportError:
         missing_deps.append("openai-whisper")
     
     try:
-        import ollama
+        import ollama # type: ignore
     except ImportError:
         missing_deps.append("ollama")
     
     try:
-        import cv2
+        import cv2 # type: ignore
     except ImportError:
         missing_deps.append("opencv-python")
     
     try:
-        import sounddevice
+        import sounddevice # type: ignore
     except ImportError:
         missing_deps.append("sounddevice")
     

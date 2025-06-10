@@ -7,12 +7,12 @@ Captures and transcribes desktop audio using Whisper
 import os
 import time
 import threading
-import numpy as np
-import sounddevice as sd
-import soundfile as sf
-from queue import Queue
-from threading import Thread, Event
-from scipy import signal
+import numpy as np # type: ignore
+import sounddevice as sd # type: ignore
+import soundfile as sf # type: ignore
+from queue import Queue # type: ignore
+from threading import Thread, Event # type: ignore
+from scipy import signal # type: ignore
 
 # Import the standalone classifier
 from .speech_music_classifier import SpeechMusicClassifier
@@ -149,7 +149,7 @@ class AudioProcessor:
         # Ensure sample rate is 16kHz for Whisper
         if self.transcriber.config.FS != 16000:
             try:
-                import librosa
+                import librosa # type: ignore
                 whisper_input = librosa.resample(whisper_input, orig_sr=self.transcriber.config.FS, target_sr=16000)
                 whisper_input = whisper_input.astype(np.float32)
             except ImportError:
@@ -168,7 +168,7 @@ class AudioProcessor:
             raise ValueError("Processed audio too quiet")
         
         # Convert to tensor for transcription
-        import torch
+        import torch # type: ignore
         if not torch.is_tensor(whisper_input):
             whisper_input = torch.tensor(whisper_input, dtype=torch.float32)
         
@@ -211,7 +211,7 @@ class DesktopAudioMonitor:
         # Initialize Whisper model
         print(f"[AUDIO] Loading Whisper model: {config.MODEL_SIZE} on {config.DEVICE}")
         try:            
-            import whisper
+            import whisper # type: ignore
             self.model = whisper.load_model(config.MODEL_SIZE)
             
             if config.DEVICE == "cuda" and hasattr(self.model, "to"):

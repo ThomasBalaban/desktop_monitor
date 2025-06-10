@@ -4,13 +4,13 @@ Desktop Vision Monitoring System
 Captures and analyzes desktop visual changes using computer vision and LLM analysis
 """
 
-import cv2
+import cv2 # type: ignore
 import time
 import base64
 import threading
-import numpy as np
-from mss import mss
-from PIL import Image
+import numpy as np # type: ignore
+from mss import mss # type: ignore
+from PIL import Image # type: ignore
 from io import BytesIO
 from collections import deque
 
@@ -27,7 +27,7 @@ class VisionProcessor:
         
         # Initialize Ollama
         try:
-            import ollama
+            import ollama # type: ignore
             self.ollama = ollama
             # Warmup the model
             print(f"[VISION] Loading model: {config.VISION_MODEL}")

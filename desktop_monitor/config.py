@@ -2,7 +2,7 @@
 Configuration settings for Desktop Monitor
 """
 import os
-import torch
+import torch # type: ignore
 
 class Config:
     """Configuration class for Desktop Monitor"""

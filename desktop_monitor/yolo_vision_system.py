@@ -5,12 +5,12 @@ Real-time object detection for desktop monitoring using YOLO models.
 Works alongside the existing LLM vision system to provide structured object detection.
 """
 
-import cv2
+import cv2 # type: ignore
 import time
 import threading
-import numpy as np
-from mss import mss
-from PIL import Image
+import numpy as np # type: ignore
+from mss import mss # type: ignore
+from PIL import Image # type: ignore
 from collections import deque, defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
@@ -129,8 +129,8 @@ class YOLOProcessor:
     def _load_model(self):
         """Load YOLO model"""
         try:
-            import ultralytics
-            from ultralytics import YOLO
+            import ultralytics # type: ignore
+            from ultralytics import YOLO # type: ignore
             
             print(f"[YOLO] Loading model: {self.config.YOLO_MODEL}")
             self.model = YOLO(self.config.YOLO_MODEL)

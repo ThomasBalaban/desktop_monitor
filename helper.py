@@ -22,7 +22,7 @@ Usage:
 import argparse
 import sys
 import time
-import numpy as np
+import numpy as np # type: ignore
 
 def find_screen_coordinates():
     """Interactive tool to find screen coordinates for monitoring"""
@@ -34,7 +34,7 @@ def find_screen_coordinates():
     print()
     
     try:
-        import pyautogui
+        import pyautogui # type: ignore
         
         # Get screen size
         screen_width, screen_height = pyautogui.size()
@@ -126,7 +126,7 @@ def list_audio_devices():
     print("=" * 60)
     
     try:
-        import sounddevice as sd
+        import sounddevice as sd # type: ignore
         
         print("Available audio devices:")
         print()
@@ -188,8 +188,8 @@ def test_audio_capture():
     print("=" * 60)
     
     try:
-        import sounddevice as sd
-        import numpy as np
+        import sounddevice as sd # type: ignore
+        import numpy as np # type: ignore
         
         # Get device info
         devices = sd.query_devices()
@@ -268,9 +268,9 @@ def test_screen_capture():
     print("=" * 60)
     
     try:
-        from mss import mss
-        import numpy as np
-        from PIL import Image
+        from mss import mss # type: ignore
+        import numpy as np # type: ignore
+        from PIL import Image # type: ignore
         import os
         
         print("Testing screen capture...")

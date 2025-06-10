@@ -16,7 +16,7 @@ Usage:
     audio_type, confidence = classifier.classify(audio_chunk)
 """
 
-import numpy as np
+import numpy as np # type: ignore
 import time
 from typing import Tuple, List, Optional
 
