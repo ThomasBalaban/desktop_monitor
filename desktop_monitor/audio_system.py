@@ -173,7 +173,7 @@ class AudioProcessor:
             whisper_input = torch.tensor(whisper_input, dtype=torch.float32)
         
         try:
-            result = self.transcriber.model.transcribe(whisper_input, **params)
+            result = self.transcriber.model.transcribe(whisper_input, language="en", **params)
             return result
         except RuntimeError as e:
             print(f"[AUDIO] Transcription runtime error: {str(e)}")
@@ -184,7 +184,7 @@ class AudioProcessor:
                 "temperature": 0.0,
                 "condition_on_previous_text": False
             }
-            result = self.transcriber.model.transcribe(whisper_input, **basic_params)
+            result = self.transcriber.model.transcribe(whisper_input, language="en", **basic_params)
             return result
             
     def save_audio(self, chunk):

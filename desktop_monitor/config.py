@@ -9,16 +9,16 @@ class Config:
     
     # Audio Configuration
     FS = 16000  # Sample rate
-    CHUNK_DURATION = 3.0  # Duration of audio chunks in seconds
+    CHUNK_DURATION = 2.0  # Duration of audio chunks in seconds
     OVERLAP = 0.5  # Overlap between chunks in seconds
-    MAX_THREADS = 4  # Maximum number of processing threads
+    MAX_THREADS = 3  # Maximum number of processing threads
     
     # Audio file storage
     SAVE_DIR = "audio_captures"
     KEEP_AUDIO_FILES = False  # Set to True to keep audio files for debugging
     
     # Whisper model configuration
-    MODEL_SIZE = "base"  # Options: tiny, base, small, medium, large
+    MODEL_SIZE = "small"  # Options: tiny, base, small, medium, large
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     
     # Audio classification
