@@ -1,20 +1,27 @@
 # Desktop Monitor Requirements
 
 # Core dependencies
-numpy>=2.2.2
-torch>=1.13.0
+numpy>=1.21.0
 opencv-python>=4.5.0
-Pillow>=11.2.1
-scipy>=1.7.0
+Pillow>=8.0.0
+torch>=1.9.0
 
 # Audio processing
 sounddevice>=0.4.0
 soundfile>=0.10.0
+scipy>=1.7.0
 openai-whisper>=20230314
 
-# Audio resampling (optional but recommended)
-librosa>=0.9.0
-
-# Vision and LLM
+# Computer vision and ML
+ultralytics>=8.0.0
 mss>=6.1.0
+
+# LLM integration
 ollama>=0.1.0
+
+# Optional performance optimizations
+librosa>=0.9.0  # For better audio resampling (optional)
+
+# Development and debugging (optional)
+matplotlib>=3.3.0  # For visualization debugging
+tqdm>=4.62.0  # Progress bars for model loading
