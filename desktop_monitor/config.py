@@ -33,19 +33,35 @@ class Config:
     # Vision Configuration
     ENABLE_VISION_MONITORING = True
     ENABLE_AUDIO_MONITORING = True
+    ENABLE_YOLO_MONITORING = True  # Enable YOLO object detection
     
     # Monitor area (left, top, width, height) - captures entire screen by default
     # You can customize this to capture specific areas
-    MONITOR_AREA = {"left": 100, "top": 100, "width": 1528, "height": 917}
+    MONITOR_AREA = {"left": 16, "top": 157, "width": 1220, "height": 686}
     
-    # Vision models
-    VISION_MODEL = "llava:13b"
+    # LLM Vision models
+    VISION_MODEL = "qwen2.5vl:7b"
     SUMMARY_MODEL = "mistral-nemo:latest"
     
-    # Vision processing
+    # LLM Vision processing
     MIN_FRAME_CHANGE = 0.10  # Minimum change threshold to process new frame
     SUMMARY_INTERVAL = 30  # Generate summary every N seconds
     FRAME_RESIZE = (800, 600)  # Resize frames for processing
+    
+    # YOLO Configuration
+    YOLO_MODEL = "yolov8n.pt"  # Options: yolov8n.pt (fastest), yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt (most accurate)
+    YOLO_CONFIDENCE = 0.5  # Confidence threshold for detections (0.0-1.0)
+    YOLO_FPS = 2.0  # Target FPS for YOLO processing (lower = less CPU usage)
+    YOLO_INPUT_SIZE = 640  # Max input size for YOLO (smaller = faster)
+    YOLO_ENABLE_TRACKING = True  # Enable object tracking across frames
+    YOLO_LOG_HIGH_CONFIDENCE = 0.8  # Log detections above this confidence
+    
+    # Integration Settings
+    YOLO_TRIGGER_LLM = True  # Use YOLO detections to trigger LLM vision analysis
+    YOLO_LLM_TRIGGER_CLASSES = [  # Classes that should trigger LLM analysis
+        'person', 'tv', 'laptop', 'cell phone', 'book', 'mouse', 'keyboard'
+    ]
+    YOLO_LLM_TRIGGER_CONFIDENCE = 0.7  # Minimum confidence to trigger LLM
     
     # Ollama configuration
     OLLAMA_GPU_LAYERS = "99"
@@ -87,5 +103,7 @@ class Config:
         
         print(f"Configuration loaded:")
         print(f"  Audio: Whisper {self.MODEL_SIZE} on {self.DEVICE}")
-        print(f"  Vision: {self.VISION_MODEL}")
+        print(f"  LLM Vision: {self.VISION_MODEL}")
+        if self.ENABLE_YOLO_MONITORING:
+            print(f"  YOLO: {self.YOLO_MODEL} (confidence: {self.YOLO_CONFIDENCE}, fps: {self.YOLO_FPS})")
         print(f"  Monitor area: {self.MONITOR_AREA}")
