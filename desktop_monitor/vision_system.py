@@ -1,7 +1,8 @@
 """
-Desktop Vision Monitoring System
+Enhanced Desktop Vision Monitoring System - Visual Narrator Mode
 
-Captures and analyzes desktop visual changes using computer vision and LLM analysis
+Updated to provide detailed visual descriptions for external AI consumption.
+Focus on rich character, environment, and action descriptions.
 """
 
 import cv2 # type: ignore
@@ -15,7 +16,7 @@ from io import BytesIO
 from collections import deque
 
 class VisionProcessor:
-    """Processes visual frames for analysis"""
+    """Enhanced processor focused on detailed visual narration"""
     
     def __init__(self, config):
         self.config = config
@@ -30,17 +31,25 @@ class VisionProcessor:
             import ollama # type: ignore
             self.ollama = ollama
             # Warmup the model
-            print(f"[VISION] Loading model: {config.VISION_MODEL}")
-            self.ollama.generate(model=config.VISION_MODEL, prompt="Ready")
-            print(f"[VISION] Model loaded successfully")
+            print(f"[VISION] Loading visual narrator model: {config.VISION_MODEL}")
+            self.ollama.generate(model=config.VISION_MODEL, prompt="Ready for visual narration")
+            print(f"[VISION] Visual narrator model loaded successfully")
         except Exception as e:
             print(f"[VISION] Error loading Ollama model: {e}")
             raise
             
-        # Analysis prompt
+        # Enhanced analysis prompt for detailed visual description
         self.prompt = """
-        Analyze ONLY what is currently visible. Describe concisely in 1-3 sentences. Do not assume what or try to guess what the content is. Try to describe the subject focus, what they are, what they look like, what they are doing, and where they are.
-        """
+Provide a detailed visual description of what's currently on screen. Describe:
+
+1. CHARACTERS/PEOPLE: Appearance, clothing, position, current actions
+2. ENVIRONMENT/SETTING: Location, colors, objects, layout, atmosphere  
+3. ACTIVITIES: What's happening right now, movements, interactions
+4. INTERFACE ELEMENTS: Any visible UI, menus, text, overlays, indicators
+5. NOTABLE OBJECTS: Important items, tools, vehicles, or visual elements
+
+Focus on observable details. Don't identify specific games, shows, or content - just describe what you see. Be specific about positions (left/right/center), colors, and actions. Provide enough detail that someone could understand the scene without seeing it.
+"""
         
     def optimize_frame(self, frame):
         """Convert a PIL image to base64 encoded JPEG for LLM processing"""
@@ -64,18 +73,22 @@ class VisionProcessor:
         change_percent = np.count_nonzero(diff) / diff.size
         
         if change_percent > self.config.MIN_FRAME_CHANGE:
-            print(f"[VISION] Screen changed ({change_percent:.2f})")
+            print(f"[VISION] Screen changed ({change_percent:.2f}) - generating new description")
             return True
         return False
     
     def analyze_frame(self, frame):
-        """Analyze a single frame using the LLM"""
+        """Generate detailed visual description using the LLM"""
         start_time = time.time()
         try:
             if not isinstance(frame, Image.Image):
                 pil_frame = Image.fromarray(frame)
             else:
                 pil_frame = frame
+                
+            # Use enhanced settings for detailed descriptions
+            temperature = getattr(self.config, 'VISUAL_DESCRIPTION_TEMPERATURE', 0.1)
+            context_size = getattr(self.config, 'VISUAL_DESCRIPTION_CONTEXT', 1300)
                 
             response = self.ollama.chat(
                 model=self.config.VISION_MODEL,
@@ -85,8 +98,8 @@ class VisionProcessor:
                     "images": [self.optimize_frame(pil_frame)]
                 }],
                 options={
-                    'temperature': 0.2,
-                    'num_ctx': 1024,
+                    'temperature': temperature,
+                    'num_ctx': context_size,
                     'num_gqa': 4,
                     'seed': int(time.time())
                 }
@@ -97,15 +110,15 @@ class VisionProcessor:
             with self.summary_lock:
                 self.analysis_history.append(result)
             
-            # Display analysis with timing
-            confidence = min(0.95, max(0.5, 1.0 - (process_time / 10.0)))
+            # Display enhanced analysis
+            confidence = min(0.95, max(0.6, 1.0 - (process_time / 15.0)))
             timestamp = time.strftime("%H:%M:%S")
-            print(f"[{timestamp} | {process_time:.1f}s] [VISION ANALYSIS {confidence:.2f}] {result}")
+            print(f"[{timestamp} | {process_time:.1f}s] [VISUAL DESCRIPTION {confidence:.2f}] {result}")
             
             return result, process_time
         
         except Exception as e:
-            error_msg = f"Error: {str(e)}"
+            error_msg = f"Visual description error: {str(e)}"
             print(f"[VISION] Analysis error: {error_msg}")
             return error_msg, 0
     
@@ -117,20 +130,22 @@ class VisionProcessor:
         if not recent_analyses:
             return "No recent activity"
 
-        summary_prompt = f"""Current situation summary from these events:
-        {chr(10).join(recent_analyses)}
-        Concise 1-3 sentence overview that attempts to guess what is happening currently from all of the image descriptions provided. Then try to guess what is currently happening. Try to follow the details of specific characters described."""
+        summary_prompt = f"""Based on these recent visual descriptions, provide a brief contextual summary of what's happening:
+
+{chr(10).join(recent_analyses)}
+
+Provide a 1-2 sentence summary that captures the overall activity or narrative flow without identifying specific content."""
         
         try:
             response = self.ollama.generate(
                 model=self.config.SUMMARY_MODEL,
                 prompt=summary_prompt,
-                options={'temperature': 0.2, 'num_predict': 250}
+                options={'temperature': 0.2, 'num_predict': 150}
             )
             summary_text = response['response']
             
             timestamp = time.strftime("%H:%M:%S")
-            print(f"[{timestamp}] [VISION SUMMARY] {summary_text}")
+            print(f"[{timestamp}] [VISUAL SUMMARY] {summary_text}")
             
             with self.summary_lock:
                 self.summarized_context.append(summary_text)
@@ -141,6 +156,68 @@ class VisionProcessor:
             print(f"[VISION] {error_msg}")
             return error_msg
     
+    def generate_enhanced_summary(self, recent_audio=None, recent_objects=None):
+        """Generate comprehensive summary combining visual + audio + objects"""
+        with self.summary_lock:
+            recent_analyses = list(self.analysis_history)[-3:]
+
+        if not recent_analyses:
+            return "No visual activity detected", None
+
+        # Build comprehensive summary
+        summary_parts = []
+        
+        # Get component weights (with defaults)
+        separator = " || "
+        
+        # 1. PRIMARY VISUAL DESCRIPTION (highest priority)
+        if recent_analyses:
+            primary_visual = recent_analyses[-1]
+            summary_parts.append(f"VISUAL: {primary_visual}")
+        
+        # 2. AUDIO CONTEXT (secondary priority)
+        if recent_audio:
+            if isinstance(recent_audio, list):
+                audio_summary = " | ".join(recent_audio[-3:])
+            else:
+                audio_summary = str(recent_audio)
+            summary_parts.append(f"AUDIO: {audio_summary}")
+        
+        # 3. OBJECT DETECTION (minimal priority)
+        if recent_objects and recent_objects != "No objects detected":
+            summary_parts.append(f"OBJECTS: {recent_objects}")
+        
+        # Combine all parts
+        comprehensive_summary = separator.join(summary_parts)
+        
+        # Generate meta-summary for context if multiple descriptions available
+        meta_summary = None
+        if len(recent_analyses) > 1:
+            try:
+                context_prompt = f"""Based on these recent visual descriptions, provide a brief contextual summary:
+
+{chr(10).join(recent_analyses)}
+
+Provide 1-2 sentences capturing the overall activity or narrative flow."""
+                
+                response = self.ollama.generate(
+                    model=self.config.SUMMARY_MODEL,
+                    prompt=context_prompt,
+                    options={'temperature': 0.2, 'num_predict': 100}
+                )
+                meta_summary = response['response'].strip()
+                
+                timestamp = time.strftime("%H:%M:%S")
+                print(f"[{timestamp}] [VISUAL CONTEXT] {meta_summary}")
+                
+                with self.summary_lock:
+                    self.summarized_context.append(meta_summary)
+                
+            except Exception as e:
+                print(f"[VISION] Meta-summary error: {str(e)}")
+        
+        return comprehensive_summary, meta_summary
+    
     def summary_worker(self):
         """Background worker to generate periodic summaries"""
         while True:
@@ -150,7 +227,7 @@ class VisionProcessor:
                 self.last_summary_time = time.time()
 
 class DesktopVisionMonitor:
-    """Main desktop vision monitoring class"""
+    """Enhanced desktop vision monitoring class focused on visual narration"""
     
     def __init__(self, config):
         self.config = config
@@ -162,10 +239,12 @@ class DesktopVisionMonitor:
         cv2.ocl.setUseOpenCL(False)
         
     def start(self):
-        """Start desktop vision monitoring"""
+        """Start enhanced desktop vision monitoring"""
+        print(f"[VISION] Enhanced Visual Descriptions Enabled")
         print(f"[VISION] Model: {self.config.VISION_MODEL}")
         print(f"[VISION] Monitor area: {self.config.MONITOR_AREA}")
         print(f"[VISION] Change threshold: {self.config.MIN_FRAME_CHANGE}")
+        print(f"[VISION] Focus: Detailed visual descriptions for external AI consumption")
         
         self.running = True
         
@@ -173,11 +252,11 @@ class DesktopVisionMonitor:
         summary_thread = threading.Thread(target=self.processor.summary_worker, daemon=True)
         summary_thread.start()
         
-        print("[VISION] Vision system initialized")
+        print("[VISION] Enhanced vision system initialized")
         
         try:
             with mss() as sct:
-                print("[VISION] Monitoring desktop visual changes...")
+                print("[VISION] Monitoring for detailed visual descriptions...")
                 
                 while self.running:
                     try:
@@ -195,7 +274,7 @@ class DesktopVisionMonitor:
                         if self.processor.validate_frame(frame):
                             self.processor.last_valid_frame = frame.copy()
                             
-                            # Analyze frame
+                            # Generate detailed visual description
                             self.processor.analyze_frame(self.processor.last_valid_frame)
                         else:
                             # Small sleep to prevent CPU overload
@@ -210,13 +289,23 @@ class DesktopVisionMonitor:
                         time.sleep(1)
                         
         except Exception as e:
-            print(f"[VISION] Error in vision monitoring: {e}")
+            print(f"[VISION] Error in enhanced vision monitoring: {e}")
         finally:
             cv2.destroyAllWindows()
             self.running = False
             
     def stop(self):
-        """Stop desktop vision monitoring"""
-        print("[VISION] Stopping desktop vision monitoring...")
+        """Stop enhanced desktop vision monitoring"""
+        print("[VISION] Stopping enhanced visual narrator...")
         self.running = False
         cv2.destroyAllWindows()
+    
+    def get_latest_description(self):
+        """Get the most recent visual description"""
+        if self.processor.analysis_history:
+            return self.processor.analysis_history[-1]
+        return "No visual description available"
+    
+    def get_comprehensive_summary(self, audio_context=None, object_context=None):
+        """Get comprehensive summary including visual, audio, and object context"""
+        return self.processor.generate_enhanced_summary(audio_context, object_context)

@@ -390,80 +390,132 @@ class DesktopMonitorGUI:
         return wrapper
     
     def _generate_overall_summary(self):
-        """Generate overall summary combining image analysis, audio, and YOLO data"""
+        """Generate enhanced overall summary for external AI consumption"""
         try:
             # Get recent speech and music content
             recent_speech = self.recent_speech_content[-5:] if self.recent_speech_content else []
             recent_music = self.recent_music_content[-3:] if self.recent_music_content else []
             
-            # Get recent YOLO data
+            # Get YOLO context (simplified)
             yolo_context = ""
             if self.yolo_monitor and hasattr(self.yolo_monitor, 'processor'):
                 current_objects = self.yolo_monitor.get_current_objects()
-                recent_changes = self.yolo_monitor.get_recent_changes(seconds=60)
                 if current_objects != "No objects detected":
-                    yolo_context = f"Current objects: {current_objects}"
-                if recent_changes:
-                    yolo_context += f" | Recent changes: {', '.join(recent_changes[-3:])}"
+                    yolo_context = current_objects
             
-            # Build overall summary prompt
+            # Build enhanced summary parts
             summary_parts = []
             
+            # 1. PRIMARY VISUAL DESCRIPTION (most important)
             if self.last_image_analysis_text and self.last_image_analysis_text != "No image analysis generated yet":
-                summary_parts.append(f"Current visual scene: {self.last_image_analysis_text}")
+                summary_parts.append(f"VISUAL: {self.last_image_analysis_text}")
             
+            # 2. AUDIO CONTEXT (secondary)
+            audio_parts = []
             if recent_speech:
-                summary_parts.append(f"Recent speech detected: {' | '.join(recent_speech)}")
-                
+                audio_parts.append(f"Speech: {' | '.join(recent_speech)}")
             if recent_music:
-                summary_parts.append(f"Recent music detected: {' | '.join(recent_music)}")
+                audio_parts.append(f"Music: {' | '.join(recent_music)}")
             
+            if audio_parts:
+                summary_parts.append(f"AUDIO: {' | '.join(audio_parts)}")
+            
+            # 3. OBJECT DETECTION (tertiary, minimal)
             if yolo_context:
-                summary_parts.append(f"Object detection: {yolo_context}")
+                summary_parts.append(f"OBJECTS: {yolo_context}")
             
+            # Combine into comprehensive summary
             if not summary_parts:
-                self.last_overall_summary_text = "No activity data available for summary"
+                self.last_overall_summary_text = "No activity detected"
                 self.last_overall_summary_time = datetime.now()
                 self.root.after(0, self._update_overall_summary_display)
                 return
             
-            # Create comprehensive summary prompt
-            context = " | ".join(summary_parts)
-            summary_prompt = f"""Analyze this multi-modal desktop activity data and provide a comprehensive 2-3 sentence summary of what the person is currently doing:
-
-{context}
-
-Consider:
-- The visual scene and what's displayed
-- Whether speech or music is being detected and what that suggests about the activity
-- Objects and their usage patterns
-- Overall context and likely activity type (working, entertainment, meeting, etc.)
-
-Provide a natural, contextual summary of the current activity."""
-
-            # Generate summary using the vision system's model
+            # Get separator (hardcoded)
+            separator = " || "
+            enhanced_summary = separator.join(summary_parts)
+            
+            # Generate meta-context using vision system if available
             if self.vision_monitor and hasattr(self.vision_monitor, 'processor'):
                 try:
-                    response = self.vision_monitor.processor.ollama.generate(
-                        model=self.config.SUMMARY_MODEL,
-                        prompt=summary_prompt,
-                        options={'temperature': 0.3, 'num_predict': 150}
+                    # Use the enhanced summary generation
+                    comprehensive_result = self.vision_monitor.processor.generate_enhanced_summary(
+                        recent_audio=recent_speech + recent_music,
+                        recent_objects=yolo_context
                     )
                     
-                    self.last_overall_summary_text = response['response'].strip()
+                    if isinstance(comprehensive_result, tuple):
+                        enhanced_summary, meta_summary = comprehensive_result
+                        if meta_summary:
+                            enhanced_summary += f"{separator}CONTEXT: {meta_summary}"
+                    
+                    self.last_overall_summary_text = enhanced_summary
                     self.last_overall_summary_time = datetime.now()
+                    
+                    # Always print to console for external AI consumption
+                    self._print_enhanced_summary_to_console(enhanced_summary)
                     
                     # Update UI
                     self.root.after(0, self._update_overall_summary_display)
                     
                 except Exception as e:
-                    self.last_overall_summary_text = f"Summary generation error: {str(e)}"
+                    print(f"Enhanced summary generation error: {str(e)}")
+                    # Fallback to basic summary
+                    self.last_overall_summary_text = enhanced_summary
                     self.last_overall_summary_time = datetime.now()
                     self.root.after(0, self._update_overall_summary_display)
-            
+            else:
+                # No vision system available, use basic summary
+                self.last_overall_summary_text = enhanced_summary
+                self.last_overall_summary_time = datetime.now()
+                self.root.after(0, self._update_overall_summary_display)
+                
         except Exception as e:
             print(f"Overall summary generation error: {e}")
-    
+            self.last_overall_summary_text = f"Summary generation error: {str(e)}"
+            self.last_overall_summary_time = datetime.now()
+            self.root.after(0, self._update_overall_summary_display)
+
+    # ADD these new methods to the DesktopMonitorGUI class:
+
+    def _print_enhanced_summary_to_console(self, summary):
+        """Print enhanced summary to console for external AI to read"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        print("\n" + "="*100)
+        print(f"ENHANCED SUMMARY FOR EXTERNAL AI - {timestamp}")
+        print("="*100)
+        print(summary)
+        print("="*100)
+        print("")  # Extra line for readability
+
+    def get_current_summary_for_external_ai(self):
+        """Get the current summary formatted for external AI consumption"""
+        if self.last_overall_summary_text and self.last_overall_summary_text != "No overall summary generated yet":
+            return self.last_overall_summary_text
+        else:
+            # Generate one on demand
+            self._generate_overall_summary()
+            return self.last_overall_summary_text
+
+    def export_summary_to_file(self, filename="current_summary.txt"):
+        """Export current summary to a file for external AI to read"""
+        try:
+            current_summary = self.get_current_summary_for_external_ai()
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"DESKTOP MONITOR SUMMARY - {timestamp}\n")
+                f.write("="*80 + "\n")
+                f.write(current_summary + "\n")
+                f.write("="*80 + "\n")
+            
+            print(f"[GUI] Summary exported to {filename}")
+            return True
+        except Exception as e:
+            print(f"[GUI] Error exporting summary: {e}")
+            return False
+
     def _yolo_callback(self, result):
         """Handle YOLO detection results"""
         enhanced_summary = result.get('enhanced_summary', 'No objects detected')
