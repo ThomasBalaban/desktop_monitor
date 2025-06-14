@@ -44,9 +44,9 @@ class Config:
     SUMMARY_MODEL = "mistral-nemo:latest"
     
     # LLM Vision processing
-    MIN_FRAME_CHANGE = 0.10  # Minimum change threshold to process new frame
-    SUMMARY_INTERVAL = 30  # Generate summary every N seconds
-    FRAME_RESIZE = (800, 600)  # Resize frames for processing
+    MIN_FRAME_CHANGE = 0.12  # Minimum change threshold to process new frame
+    FRAME_RESIZE = (800, 600)  # Larger frame size for better detail recognition
+    SUMMARY_INTERVALSUMMARY_INTERVAL = 10  # Generate summary every N seconds
     
     # Enhanced YOLO Configuration
     YOLO_MODEL = "yolov8n.pt"  # Options: yolov8n.pt (fastest), yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt (most accurate)
