@@ -45,8 +45,7 @@ Provide a detailed visual description of what's currently on screen. Describe:
 1. CHARACTERS/PEOPLE: Appearance, clothing, position, current actions
 2. ENVIRONMENT/SETTING: Location, colors, objects, layout, atmosphere  
 3. ACTIVITIES: What's happening right now, movements, interactions
-4. INTERFACE ELEMENTS: Any visible UI, menus, text, overlays, indicators
-5. NOTABLE OBJECTS: Important items, tools, vehicles, or visual elements
+4. NOTABLE OBJECTS: Important items, tools, vehicles, or visual elements
 
 Focus on observable details. Don't identify specific games, shows, or content - just describe what you see. Be specific about positions (left/right/center), colors, and actions. Provide enough detail that someone could understand the scene without seeing it.
 """
