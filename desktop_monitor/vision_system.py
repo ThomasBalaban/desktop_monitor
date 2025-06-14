@@ -1,7 +1,8 @@
 """
-Desktop Vision Monitoring System
+Desktop Vision Monitoring System with Burst Capture
 
-Captures and analyzes desktop visual changes using computer vision and LLM analysis
+Enhanced version that captures multiple frames during fast action and maintains
+rolling summaries for better context understanding.
 """
 
 import cv2 # type: ignore
@@ -13,40 +14,65 @@ from mss import mss # type: ignore
 from PIL import Image # type: ignore
 from io import BytesIO
 from collections import deque
+from typing import List, Tuple, Optional
 
 class VisionProcessor:
-    """Processes visual frames for analysis"""
+    """Enhanced processor with burst capture and rolling summary capabilities"""
     
     def __init__(self, config):
         self.config = config
-        self.analysis_history = deque(maxlen=10)
-        self.summarized_context = deque(maxlen=3)
-        self.summary_lock = threading.Lock()
-        self.last_summary_time = time.time()
+        
+        # Rolling analysis storage (increased from 10 to handle burst captures)
+        self.analysis_history = deque(maxlen=15)
+        self.rolling_summaries = deque(maxlen=5)  # Keep last 5 rolling summaries
+        
+        # Burst capture state
+        self.burst_in_progress = False
+        self.burst_lock = threading.Lock()
+        
+        # Frame validation
         self.last_valid_frame = None
         
-        # Initialize Ollama
+        # Summary timing
+        self.summary_lock = threading.Lock()
+        self.last_summary_time = time.time()
+        
+        # Initialize Ollama models (burst-only)
         try:
             import ollama # type: ignore
             self.ollama = ollama
-            # Warmup the model
-            print(f"[VISION] Loading model: {config.VISION_MODEL}")
-            self.ollama.generate(model=config.VISION_MODEL, prompt="Ready")
-            print(f"[VISION] Model loaded successfully")
+            
+            # Warmup LLaVA for burst analysis (suppress output)
+            try:
+                self.ollama.generate(model="llava:7b", prompt="Ready", options={'num_predict': 1})
+            except:
+                print(f"[VISION ERROR] Could not load llava:7b model")
+                raise
+                
+            # Warmup Nemo for summaries
+            self.ollama.generate(model=config.SUMMARY_MODEL, prompt="Ready", options={'num_predict': 1})
+            
         except Exception as e:
-            print(f"[VISION] Error loading Ollama model: {e}")
+            print(f"[VISION ERROR] Failed to initialize Ollama: {e}")
             raise
             
-        # Analysis prompt
-        self.prompt = """
-        Analyze ONLY what is currently visible. Describe concisely in 1-3 sentences. Do not assume what or try to guess what the content is. Try to describe the subject focus, what they are, what they look like, what they are doing, and where they are.
+        # Burst analysis prompt (no single frame prompt needed)
+        self.burst_analysis_prompt = """
+        Analyze this sequence of 3 frames captured 0.3 seconds apart during detected screen activity.
+        
+        Describe what's happening across these frames in 2-3 sentences:
+        - What action or activity is taking place
+        - How the scene changes between frames
+        - The overall context (gaming, work, browsing, etc.)
+        
+        Focus on movement, transitions, and dynamic elements rather than static descriptions.
         """
         
     def optimize_frame(self, frame):
-        """Convert a PIL image to base64 encoded JPEG for LLM processing"""
-        frame = frame.resize(self.config.FRAME_RESIZE, Image.BILINEAR)
+        """Convert PIL image to base64 JPEG for LLM processing"""
+        frame = frame.resize(self.config.FRAME_RESIZE, Image.LANCZOS)
         buffered = BytesIO()
-        frame.save(buffered, format="JPEG", quality=95, optimize=True)
+        frame.save(buffered, format="JPEG", quality=90, optimize=True)
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
     
     def validate_frame(self, frame):
@@ -63,128 +89,194 @@ class VisionProcessor:
         diff = cv2.absdiff(current_np, last_np)
         change_percent = np.count_nonzero(diff) / diff.size
         
-        if change_percent > self.config.MIN_FRAME_CHANGE:
-            print(f"[VISION] Screen changed ({change_percent:.2f})")
-            return True
-        return False
+        return change_percent > self.config.MIN_FRAME_CHANGE
     
-    def analyze_frame(self, frame):
-        """Analyze a single frame using the LLM"""
+    def capture_burst_sequence(self, initial_frame: Image.Image, sct) -> List[Image.Image]:
+        """Capture a sequence of 3 frames spaced 0.3 seconds apart"""
+        frames = [initial_frame]
+        
+        for i in range(2):  # Capture 2 more frames (total of 3)
+            time.sleep(0.3)
+            
+            # Capture next frame
+            sct_img = sct.grab(self.config.MONITOR_AREA)
+            frame = Image.frombytes(
+                'RGB', 
+                (sct_img.width, sct_img.height), 
+                sct_img.rgb
+            )
+            frames.append(frame)
+        
+        return frames
+    
+    def analyze_frame(self, frames_list) -> Tuple[str, float]:
+        """
+        Analyze burst sequence only (no single frame analysis)
+        
+        Args:
+            frames_list: List of PIL Images from burst capture
+            
+        Returns:
+            Tuple of (analysis_result, process_time)
+        """
         start_time = time.time()
+        
         try:
-            if not isinstance(frame, Image.Image):
-                pil_frame = Image.fromarray(frame)
-            else:
-                pil_frame = frame
+            # Only burst analysis supported
+            if not isinstance(frames_list, list):
+                raise ValueError("Only burst analysis supported - frames must be a list")
                 
+            return self._analyze_burst_frames(frames_list, start_time)
+                
+        except Exception as e:
+            error_msg = f"Burst analysis error: {str(e)}"
+            print(f"[VISION ERROR] {error_msg}")
+            return error_msg, time.time() - start_time
+    
+    def _analyze_burst_frames(self, frames: List[Image.Image], start_time: float) -> Tuple[str, float]:
+        """Analyze a burst sequence of frames using LLaVA 7B"""
+        try:
+            # Prepare images for LLaVA
+            frame_images = [self.optimize_frame(frame) for frame in frames]
+            
+            # Use LLaVA 7B for multi-frame analysis
             response = self.ollama.chat(
-                model=self.config.VISION_MODEL,
+                model="llava:7b",
                 messages=[{
                     "role": "user", 
-                    "content": self.prompt, 
-                    "images": [self.optimize_frame(pil_frame)]
+                    "content": self.burst_analysis_prompt, 
+                    "images": frame_images
                 }],
                 options={
-                    'temperature': 0.2,
-                    'num_ctx': 1024,
-                    'num_gqa': 4,
-                    'seed': int(time.time())
+                    'temperature': 0.3,
+                    'num_ctx': 2048,
+                    'num_predict': 150
                 }
             )
+            
             result = response['message']['content'].strip()
             process_time = time.time() - start_time
             
-            with self.summary_lock:
-                self.analysis_history.append(result)
-            
-            # Display analysis with timing
-            confidence = min(0.95, max(0.5, 1.0 - (process_time / 10.0)))
-            timestamp = time.strftime("%H:%M:%S")
-            print(f"[{timestamp} | {process_time:.1f}s] [VISION ANALYSIS {confidence:.2f}] {result}")
+            # Store in analysis history
+            self.analysis_history.append({
+                'type': 'burst',
+                'result': result,
+                'timestamp': time.time(),
+                'frames': len(frames),
+                'model': "llava:7b"
+            })
             
             return result, process_time
-        
+            
         except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            print(f"[VISION] Analysis error: {error_msg}")
-            return error_msg, 0
+            raise Exception(f"Burst frame analysis failed: {str(e)}")
     
-    def generate_summary(self):
-        """Generate a summary of recent visual activity"""
+    def generate_rolling_summary(self):
+        """Generate enhanced rolling summary from recent burst analyses"""
         with self.summary_lock:
-            recent_analyses = list(self.analysis_history)[-5:]
+            recent_analyses = list(self.analysis_history)[-8:]  # Get more context
 
-        if not recent_analyses:
-            return "No recent activity"
+        if len(recent_analyses) < 2:
+            return "Insufficient activity data"
 
-        summary_prompt = f"""Current situation summary from these events:
-        {chr(10).join(recent_analyses)}
-        Concise 1-3 sentence overview that attempts to guess what is happening currently from all of the image descriptions provided. Then try to guess what is currently happening. Try to follow the details of specific characters described."""
+        # All analyses are burst analyses now
+        burst_analyses = [a for a in recent_analyses if a['type'] == 'burst']
+        
+        # Build context for summary
+        if burst_analyses:
+            burst_context = " | ".join([a['result'] for a in burst_analyses[-3:]])
+            context_part = f"Recent dynamic activity: {burst_context}"
+        else:
+            return "No recent burst activity to summarize"
+        
+        # Enhanced summary prompt
+        summary_prompt = f"""
+        Analyze this sequence of desktop monitoring burst capture observations and provide a rolling summary.
+        
+        {context_part}
+        
+        Provide a 2-3 sentence summary that:
+        - Identifies the primary activity or context (gaming, work, browsing, etc.)
+        - Describes the overall progression or changes observed
+        - Captures the current state or focus
+        
+        Be specific about what the user appears to be doing rather than just describing interface elements.
+        """
         
         try:
             response = self.ollama.generate(
                 model=self.config.SUMMARY_MODEL,
                 prompt=summary_prompt,
-                options={'temperature': 0.2, 'num_predict': 250}
+                options={
+                    'temperature': 0.3, 
+                    'num_predict': 120,
+                    'num_ctx': 2048
+                }
             )
-            summary_text = response['response']
             
-            timestamp = time.strftime("%H:%M:%S")
-            print(f"[{timestamp}] [VISION SUMMARY] {summary_text}")
+            summary_text = response['response'].strip()
             
+            # Store the rolling summary
             with self.summary_lock:
-                self.summarized_context.append(summary_text)
+                self.rolling_summaries.append({
+                    'summary': summary_text,
+                    'timestamp': time.time(),
+                    'analysis_count': len(recent_analyses),
+                    'burst_count': len(burst_analyses)
+                })
             
             return summary_text
+            
         except Exception as e:
-            error_msg = f"Summary error: {str(e)}"
-            print(f"[VISION] {error_msg}")
+            error_msg = f"Rolling summary error: {str(e)}"
+            print(f"[VISION ERROR] {error_msg}")
             return error_msg
     
+    def get_latest_rolling_summary(self) -> str:
+        """Get the most recent rolling summary"""
+        with self.summary_lock:
+            if self.rolling_summaries:
+                return self.rolling_summaries[-1]['summary']
+            return "No rolling summary available yet"
+    
     def summary_worker(self):
-        """Background worker to generate periodic summaries"""
+        """Background worker to generate periodic rolling summaries"""
         while True:
             time.sleep(1)
             if time.time() - self.last_summary_time > self.config.SUMMARY_INTERVAL:
-                self.generate_summary()
+                self.generate_rolling_summary()
                 self.last_summary_time = time.time()
 
 class DesktopVisionMonitor:
-    """Main desktop vision monitoring class"""
+    """Enhanced desktop vision monitoring with burst capture"""
     
     def __init__(self, config):
         self.config = config
         self.processor = VisionProcessor(config)
         self.running = False
         
-        # Set up OpenCV
+        # Burst capture state
+        self.last_burst_time = 0
+        self.burst_cooldown = 2.0  # Minimum seconds between bursts
+        
+        # Set up OpenCV (minimal configuration for Mac)
         cv2.setNumThreads(2)
         cv2.ocl.setUseOpenCL(False)
         
     def start(self):
-        """Start desktop vision monitoring"""
-        print(f"[VISION] Model: {self.config.VISION_MODEL}")
-        print(f"[VISION] Monitor area: {self.config.MONITOR_AREA}")
-        print(f"[VISION] Change threshold: {self.config.MIN_FRAME_CHANGE}")
-        
+        """Start enhanced desktop vision monitoring"""
         self.running = True
         
         # Start summary worker thread
         summary_thread = threading.Thread(target=self.processor.summary_worker, daemon=True)
         summary_thread.start()
         
-        print("[VISION] Vision system initialized")
-        
         try:
             with mss() as sct:
-                print("[VISION] Monitoring desktop visual changes...")
-                
                 while self.running:
                     try:
-                        # Capture frame
+                        # Capture initial frame
                         sct_img = sct.grab(self.config.MONITOR_AREA)
-                        
-                        # Create PIL Image from screenshot
                         frame = Image.frombytes(
                             'RGB', 
                             (sct_img.width, sct_img.height), 
@@ -194,29 +286,58 @@ class DesktopVisionMonitor:
                         # Check if frame changed enough to process
                         if self.processor.validate_frame(frame):
                             self.processor.last_valid_frame = frame.copy()
+                            current_time = time.time()
                             
-                            # Analyze frame
-                            self.processor.analyze_frame(self.processor.last_valid_frame)
+                            # Decide whether to do burst capture or single frame analysis
+                            if (current_time - self.last_burst_time > self.burst_cooldown and 
+                                not self.processor.burst_in_progress):
+                                
+                                # Initiate burst capture
+                                with self.processor.burst_lock:
+                                    self.processor.burst_in_progress = True
+                                    self.last_burst_time = current_time
+                                
+                                try:
+                                    # Capture burst sequence
+                                    burst_frames = self.processor.capture_burst_sequence(frame, sct)
+                                    
+                                    # Analyze the burst
+                                    result, process_time = self.processor.analyze_frame(burst_frames)
+                                    
+                                    # For GUI: only show the first frame from the burst
+                                    if hasattr(self.processor, '_gui_callback'):
+                                        self.processor._gui_callback(burst_frames[0], result, process_time)
+                                    
+                                finally:
+                                    with self.processor.burst_lock:
+                                        self.processor.burst_in_progress = False
+                            else:
+                                # Single frame analysis (when in cooldown or burst in progress)
+                                result, process_time = self.processor.analyze_frame(frame)
+                                
+                                # For GUI callback
+                                if hasattr(self.processor, '_gui_callback'):
+                                    self.processor._gui_callback(frame, result, process_time)
                         else:
-                            # Small sleep to prevent CPU overload
+                            # Small sleep when no changes detected
                             time.sleep(0.1)
 
-                        # Exit check
-                        if cv2.waitKey(25) & 0xFF == ord('q'):
-                            break
-                            
+                        # Exit check (removed keyboard check for Mac compatibility)
+                        
                     except Exception as e:
-                        print(f"[VISION] Frame capture error: {str(e)}")
+                        print(f"[VISION ERROR] Frame processing: {str(e)}")
                         time.sleep(1)
                         
         except Exception as e:
-            print(f"[VISION] Error in vision monitoring: {e}")
+            print(f"[VISION ERROR] Monitoring failed: {e}")
         finally:
-            cv2.destroyAllWindows()
             self.running = False
             
     def stop(self):
         """Stop desktop vision monitoring"""
-        print("[VISION] Stopping desktop vision monitoring...")
         self.running = False
         cv2.destroyAllWindows()
+    
+    def set_gui_callback(self, callback):
+        """Set callback for GUI updates (callback receives: frame, analysis, process_time)"""
+        self.processor._gui_callback = callback

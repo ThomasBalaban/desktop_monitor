@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Desktop Monitor GUI - macOS Interface
+Desktop Monitor GUI - Enhanced with Burst Capture
 
-A modern tkinter-based GUI for the Desktop Monitor application.
+A modern tkinter-based GUI for the Desktop Monitor application with burst capture support.
 Provides real-time monitoring displays and system controls.
 """
 
@@ -25,7 +25,7 @@ from .yolo_vision_system import DesktopYOLOMonitor
 from .config import Config
 
 class DesktopMonitorGUI:
-    """Main GUI application for Desktop Monitor"""
+    """Main GUI application for Desktop Monitor with burst capture support"""
     
     def __init__(self):
         self.config = Config()
@@ -41,12 +41,15 @@ class DesktopMonitorGUI:
         self.last_activity_time = time.time()
         self.watchdog_timeout = 60  # Seconds without activity before considering it stopped
         
-        # UI state
+        # Enhanced UI state for burst capture
         self.last_image_analysis_time = None
         self.last_image_analysis_text = "No image analysis generated yet"
-        self.last_overall_summary_time = None
-        self.last_overall_summary_text = "No overall summary generated yet"
+        self.last_rolling_summary_time = None
+        self.last_rolling_summary_text = "No rolling summary generated yet"
         self.current_image = None
+        
+        # Track analysis types
+        self.last_analysis_type = "single"  # Track if last analysis was single or burst
         
         # Data storage for UI updates
         self.latest_audio = "No audio detected"
@@ -54,7 +57,7 @@ class DesktopMonitorGUI:
         self.latest_visual_frame = None
         self.current_audio_type = "speech"  # Track current audio classification
         
-        # Audio history for overall summaries
+        # Audio history for rolling summaries
         self.recent_audio_history = []
         self.recent_speech_content = []
         self.recent_music_content = []
@@ -69,7 +72,7 @@ class DesktopMonitorGUI:
     def setup_main_window(self):
         """Initialize the main window"""
         self.root = tk.Tk()
-        self.root.title("Desktop Monitor")
+        self.root.title("Desktop Monitor - Enhanced")
         self.root.geometry("1200x800")
         
         # macOS specific styling
@@ -123,8 +126,11 @@ class DesktopMonitorGUI:
         header_frame = ttk.Frame(parent)
         header_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Title
-        title_label = ttk.Label(header_frame, text="Desktop Monitor", style='Title.TLabel')
+        # Title with burst indicator
+        title_text = "Desktop Monitor - Enhanced"
+        if self.config.BURST_CAPTURE_ENABLED:
+            title_text += " [BURST]"
+        title_label = ttk.Label(header_frame, text=title_text, style='Title.TLabel')
         title_label.pack(side=tk.LEFT)
         
         # Status indicator
@@ -168,8 +174,21 @@ class DesktopMonitorGUI:
         self.audio_text.insert(tk.END, "Audio monitoring not started")
         self.audio_text.configure(state='disabled')
         
-        # Visual section
-        visual_frame = ttk.LabelFrame(parent, text="Current Screen", padding=10)
+        # Visual section with burst indicator
+        visual_header_frame = ttk.Frame(parent)
+        visual_header_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        visual_title = ttk.Label(visual_header_frame, text="Current Screen", 
+                               font=('SF Pro Display', 11, 'bold'))
+        visual_title.pack(side=tk.LEFT)
+        
+        # Burst mode indicator
+        if self.config.BURST_CAPTURE_ENABLED:
+            burst_indicator = ttk.Label(visual_header_frame, text="[BURST MODE]", 
+                                      foreground='orange', font=('SF Pro Display', 9, 'bold'))
+            burst_indicator.pack(side=tk.LEFT, padx=(10, 0))
+        
+        visual_frame = ttk.LabelFrame(parent, text="", padding=10)
         visual_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Image display
@@ -187,7 +206,7 @@ class DesktopMonitorGUI:
         self.yolo_text.configure(state='disabled')
         
     def setup_right_panel(self, parent):
-        """Setup right panel with image analysis and overall summary"""
+        """Setup right panel with image analysis and rolling summary"""
         # Recent Image Analysis (35% height)
         image_analysis_header = ttk.Frame(parent)
         image_analysis_header.pack(fill=tk.X, pady=(0, 5))
@@ -202,9 +221,6 @@ class DesktopMonitorGUI:
         image_frame = ttk.LabelFrame(parent, text="", padding=10)
         image_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        # Set height proportion for image analysis (35%)
-        image_frame.pack_configure(fill=tk.BOTH, expand=True)
-        
         self.image_analysis_text = scrolledtext.ScrolledText(image_frame, 
                                                            font=('SF Pro Display', 10),
                                                            wrap=tk.WORD,
@@ -212,25 +228,25 @@ class DesktopMonitorGUI:
         self.image_analysis_text.pack(fill=tk.BOTH, expand=True)
         self.image_analysis_text.insert(tk.END, "Image analysis will appear here once monitoring starts...")
         
-        # Overall Summary (65% height)
-        overall_header = ttk.Frame(parent)
-        overall_header.pack(fill=tk.X, pady=(0, 5))
+        # Rolling Summary (65% height)
+        rolling_header = ttk.Frame(parent)
+        rolling_header.pack(fill=tk.X, pady=(0, 5))
         
-        overall_title = ttk.Label(overall_header, text="Overall Activity Summary", style='Heading.TLabel')
-        overall_title.pack(side=tk.LEFT)
+        rolling_title = ttk.Label(rolling_header, text="Rolling Activity Summary", style='Heading.TLabel')
+        rolling_title.pack(side=tk.LEFT)
         
-        self.overall_time_label = ttk.Label(overall_header, text="No summary yet", 
+        self.rolling_time_label = ttk.Label(rolling_header, text="No summary yet", 
                                           style='Info.TLabel')
-        self.overall_time_label.pack(side=tk.RIGHT)
+        self.rolling_time_label.pack(side=tk.RIGHT)
         
-        overall_frame = ttk.LabelFrame(parent, text="", padding=10)
-        overall_frame.pack(fill=tk.BOTH, expand=True)
+        rolling_frame = ttk.LabelFrame(parent, text="", padding=10)
+        rolling_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.overall_summary_text = scrolledtext.ScrolledText(overall_frame, 
+        self.rolling_summary_text = scrolledtext.ScrolledText(rolling_frame, 
                                                             font=('SF Pro Display', 11),
                                                             wrap=tk.WORD)
-        self.overall_summary_text.pack(fill=tk.BOTH, expand=True)
-        self.overall_summary_text.insert(tk.END, "Overall activity summary will appear here once monitoring starts...")
+        self.rolling_summary_text.pack(fill=tk.BOTH, expand=True)
+        self.rolling_summary_text.insert(tk.END, "Rolling activity summary will appear here once monitoring starts...")
         
     def start_monitoring(self):
         """Start the monitoring systems"""
@@ -249,7 +265,7 @@ class DesktopMonitorGUI:
         monitor_thread.start()
         
     def _start_monitoring_systems(self):
-        """Start monitoring systems in background thread"""
+        """Start monitoring systems in background thread with burst capture support"""
         try:
             # Start audio monitoring
             if self.config.ENABLE_AUDIO_MONITORING:
@@ -258,12 +274,33 @@ class DesktopMonitorGUI:
                 audio_thread = threading.Thread(target=self.audio_monitor.start, daemon=True)
                 audio_thread.start()
             
-            # Start vision monitoring
+            # Start enhanced vision monitoring with burst capture
             if self.config.ENABLE_VISION_MONITORING:
                 self.vision_monitor = DesktopVisionMonitor(self.config)
-                # Override analysis result handling
-                original_analyze = self.vision_monitor.processor.analyze_frame
-                self.vision_monitor.processor.analyze_frame = self._vision_callback_wrapper(original_analyze)
+                
+                # Set up enhanced callback for burst capture
+                def enhanced_vision_callback(frame, analysis, process_time):
+                    # Update activity time
+                    self.last_activity_time = time.time()
+                    
+                    # Store frame for display (always the first frame from burst or single frame)
+                    if isinstance(frame, Image.Image):
+                        self.latest_visual_frame = frame
+                    else:
+                        self.latest_visual_frame = Image.fromarray(frame)
+                    
+                    # Update analysis
+                    self.last_image_analysis_text = analysis
+                    self.last_image_analysis_time = datetime.now()
+                    
+                    # Update UI
+                    self.root.after(0, self._update_vision_display)
+                    self.root.after(0, self._update_image_analysis_display)
+                
+                # Set the callback
+                self.vision_monitor.set_gui_callback(enhanced_vision_callback)
+                
+                # Start in thread
                 vision_thread = threading.Thread(target=self.vision_monitor.start, daemon=True)
                 vision_thread.start()
             
@@ -348,7 +385,7 @@ class DesktopMonitorGUI:
             # Update current audio type
             self.current_audio_type = audio_type.lower()
             
-            # Store audio content for overall summaries
+            # Store audio content for rolling summaries
             if audio_type.lower() == "speech" and text.strip():
                 self.recent_speech_content.append(text.strip())
                 # Keep only last 10 speech items
@@ -364,105 +401,76 @@ class DesktopMonitorGUI:
             self.root.after(0, self._update_audio_display)
             self.root.after(0, self._update_audio_type_display)
     
-    def _vision_callback_wrapper(self, original_analyze):
-        """Wrapper for vision analysis to capture results"""
-        def wrapper(frame):
-            result, process_time = original_analyze(frame)
-            
-            # Update activity time
-            self.last_activity_time = time.time()
-            
-            # Capture the frame for display
-            if isinstance(frame, Image.Image):
-                self.latest_visual_frame = frame
-            else:
-                self.latest_visual_frame = Image.fromarray(frame)
-            
-            # Update image analysis
-            self.last_image_analysis_text = result
-            self.last_image_analysis_time = datetime.now()
-            
-            # Update UI
-            self.root.after(0, self._update_vision_display)
-            self.root.after(0, self._update_image_analysis_display)
-            
-            return result, process_time
-        return wrapper
-    
-    def _generate_overall_summary(self):
-        """Generate overall summary combining image analysis, audio, and YOLO data"""
+    def _generate_rolling_summary(self):
+        """Generate enhanced rolling summary using the vision system's capabilities"""
         try:
-            # Get recent speech and music content
-            recent_speech = self.recent_speech_content[-5:] if self.recent_speech_content else []
-            recent_music = self.recent_music_content[-3:] if self.recent_music_content else []
-            
-            # Get recent YOLO data
-            yolo_context = ""
-            if self.yolo_monitor and hasattr(self.yolo_monitor, 'processor'):
-                current_objects = self.yolo_monitor.get_current_objects()
-                recent_changes = self.yolo_monitor.get_recent_changes(seconds=60)
-                if current_objects != "No objects detected":
-                    yolo_context = f"Current objects: {current_objects}"
-                if recent_changes:
-                    yolo_context += f" | Recent changes: {', '.join(recent_changes[-3:])}"
-            
-            # Build overall summary prompt
-            summary_parts = []
-            
-            if self.last_image_analysis_text and self.last_image_analysis_text != "No image analysis generated yet":
-                summary_parts.append(f"Current visual scene: {self.last_image_analysis_text}")
-            
-            if recent_speech:
-                summary_parts.append(f"Recent speech detected: {' | '.join(recent_speech)}")
-                
-            if recent_music:
-                summary_parts.append(f"Recent music detected: {' | '.join(recent_music)}")
-            
-            if yolo_context:
-                summary_parts.append(f"Object detection: {yolo_context}")
-            
-            if not summary_parts:
-                self.last_overall_summary_text = "No activity data available for summary"
-                self.last_overall_summary_time = datetime.now()
-                self.root.after(0, self._update_overall_summary_display)
-                return
-            
-            # Create comprehensive summary prompt
-            context = " | ".join(summary_parts)
-            summary_prompt = f"""Analyze this multi-modal desktop activity data and provide a comprehensive 2-3 sentence summary of what the person is currently doing:
-
-{context}
-
-Consider:
-- The visual scene and what's displayed
-- Whether speech or music is being detected and what that suggests about the activity
-- Objects and their usage patterns
-- Overall context and likely activity type (working, entertainment, meeting, etc.)
-
-Provide a natural, contextual summary of the current activity."""
-
-            # Generate summary using the vision system's model
+            # Get rolling summary from vision processor
             if self.vision_monitor and hasattr(self.vision_monitor, 'processor'):
-                try:
-                    response = self.vision_monitor.processor.ollama.generate(
-                        model=self.config.SUMMARY_MODEL,
-                        prompt=summary_prompt,
-                        options={'temperature': 0.3, 'num_predict': 150}
-                    )
+                rolling_summary = self.vision_monitor.processor.get_latest_rolling_summary()
+                
+                # Enhance with recent audio and YOLO context
+                recent_speech = self.recent_speech_content[-3:] if self.recent_speech_content else []
+                recent_music = self.recent_music_content[-2:] if self.recent_music_content else []
+                
+                # Get YOLO context
+                yolo_context = ""
+                if self.yolo_monitor and hasattr(self.yolo_monitor, 'processor'):
+                    current_objects = self.yolo_monitor.get_current_objects()
+                    if current_objects != "No objects detected":
+                        yolo_context = f" | Objects: {current_objects}"
+                
+                # Combine contexts
+                enhanced_summary = rolling_summary
+                
+                if recent_speech:
+                    speech_context = " | ".join(recent_speech)
+                    enhanced_summary += f" | Recent speech: {speech_context}"
                     
-                    self.last_overall_summary_text = response['response'].strip()
-                    self.last_overall_summary_time = datetime.now()
+                if recent_music:
+                    music_context = " | ".join(recent_music)
+                    enhanced_summary += f" | Audio: {music_context}"
+                
+                if yolo_context:
+                    enhanced_summary += yolo_context
+                
+                # If we have multimodal context, create a final synthesis
+                if recent_speech or recent_music or yolo_context:
+                    synthesis_prompt = f"""
+                    Synthesize this multimodal desktop activity data into a comprehensive summary:
                     
-                    # Update UI
-                    self.root.after(0, self._update_overall_summary_display)
+                    Visual analysis: {rolling_summary}
+                    {f"Speech detected: {' | '.join(recent_speech)}" if recent_speech else ""}
+                    {f"Audio detected: {' | '.join(recent_music)}" if recent_music else ""}
+                    {f"Objects detected: {yolo_context}" if yolo_context else ""}
                     
-                except Exception as e:
-                    self.last_overall_summary_text = f"Summary generation error: {str(e)}"
-                    self.last_overall_summary_time = datetime.now()
-                    self.root.after(0, self._update_overall_summary_display)
-            
+                    Provide a 2-3 sentence synthesis of what the user is currently doing, combining all available information.
+                    """
+                    
+                    try:
+                        if hasattr(self.vision_monitor.processor, 'ollama'):
+                            response = self.vision_monitor.processor.ollama.generate(
+                                model=self.config.SUMMARY_MODEL,
+                                prompt=synthesis_prompt,
+                                options={'temperature': 0.3, 'num_predict': 100}
+                            )
+                            enhanced_summary = response['response'].strip()
+                    except Exception:
+                        # Fallback to basic enhanced summary
+                        pass
+                
+                self.last_rolling_summary_text = enhanced_summary
+                self.last_rolling_summary_time = datetime.now()
+                
+                # Update UI
+                self.root.after(0, self._update_rolling_summary_display)
+                
+            else:
+                self.last_rolling_summary_text = "Vision system not available for rolling summary"
+                self.last_rolling_summary_time = datetime.now()
+                self.root.after(0, self._update_rolling_summary_display)
+                
         except Exception as e:
-            print(f"Overall summary generation error: {e}")
+            print(f"[GUI ERROR] Rolling summary generation: {e}")
     
     def _yolo_callback(self, result):
         """Handle YOLO detection results"""
@@ -546,10 +554,20 @@ Provide a natural, contextual summary of the current activity."""
         self.yolo_text.configure(state='disabled')
     
     def _update_image_analysis_display(self):
-        """Update image analysis display in UI thread"""
+        """Enhanced image analysis display with burst capture indicators"""
         # Update image analysis text
         self.image_analysis_text.delete(1.0, tk.END)
-        self.image_analysis_text.insert(tk.END, self.last_image_analysis_text)
+        
+        # Add analysis type indicator
+        type_indicator = ""
+        if hasattr(self, 'last_analysis_type'):
+            if self.last_analysis_type == "burst":
+                type_indicator = "[BURST] "
+            elif self.last_analysis_type == "single":
+                type_indicator = "[SINGLE] "
+        
+        display_text = f"{type_indicator}{self.last_image_analysis_text}"
+        self.image_analysis_text.insert(tk.END, display_text)
         
         # Update time label
         if self.last_image_analysis_time:
@@ -567,15 +585,15 @@ Provide a natural, contextual summary of the current activity."""
                 
             self.image_time_label.configure(text=time_text)
     
-    def _update_overall_summary_display(self):
-        """Update overall summary display in UI thread"""
-        # Update overall summary text
-        self.overall_summary_text.delete(1.0, tk.END)
-        self.overall_summary_text.insert(tk.END, self.last_overall_summary_text)
+    def _update_rolling_summary_display(self):
+        """Update rolling summary display in UI thread"""
+        # Update rolling summary text
+        self.rolling_summary_text.delete(1.0, tk.END)
+        self.rolling_summary_text.insert(tk.END, self.last_rolling_summary_text)
         
         # Update time label
-        if self.last_overall_summary_time:
-            time_diff = datetime.now() - self.last_overall_summary_time
+        if self.last_rolling_summary_time:
+            time_diff = datetime.now() - self.last_rolling_summary_time
             seconds = int(time_diff.total_seconds())
             
             if seconds < 60:
@@ -587,7 +605,7 @@ Provide a natural, contextual summary of the current activity."""
                 hours = seconds // 3600
                 time_text = f"{hours} hours ago"
                 
-            self.overall_time_label.configure(text=time_text)
+            self.rolling_time_label.configure(text=time_text)
     
     def _check_monitoring_health(self):
         """Check if monitoring systems are still active"""
@@ -599,7 +617,8 @@ Provide a natural, contextual summary of the current activity."""
         
         # If no activity for more than timeout and we didn't stop manually
         if time_since_activity > self.watchdog_timeout and not self.user_requested_stop:
-            print(f"[WATCHDOG] No activity detected for {time_since_activity:.0f} seconds - monitoring may have stopped unexpectedly")
+            if not self.config.MINIMAL_LOGGING:
+                print(f"[WATCHDOG] No activity detected for {time_since_activity:.0f} seconds - monitoring may have stopped unexpectedly")
             self._trigger_unexpected_stop_notification()
     
     def _trigger_unexpected_stop_notification(self):
@@ -611,9 +630,8 @@ Provide a natural, contextual summary of the current activity."""
         self.monitoring_active = False
         self._reset_buttons()
         
-        # Play system sound
+        # Play system sound (Mac specific)
         try:
-            # macOS system sound
             import subprocess
             subprocess.run(['afplay', '/System/Library/Sounds/Sosumi.aiff'], check=False)
         except Exception:
@@ -684,12 +702,12 @@ Provide a natural, contextual summary of the current activity."""
         ok_button.pack(pady=(0, 20))
     
     def update_ui_loop(self):
-        """Continuous UI update loop"""
+        """Enhanced UI update loop with rolling summary timing"""
         # Update time displays every second
         if self.last_image_analysis_time:
             self._update_image_analysis_display()
-        if self.last_overall_summary_time:
-            self._update_overall_summary_display()
+        if self.last_rolling_summary_time:
+            self._update_rolling_summary_display()
             
         # Check monitoring health every 30 seconds
         if hasattr(self, '_last_health_check'):
@@ -699,12 +717,12 @@ Provide a natural, contextual summary of the current activity."""
         else:
             self._last_health_check = time.time()
             
-        # Generate overall summary every 30 seconds if monitoring is active
+        # Generate rolling summary every 45 seconds (adjusted for burst captures)
         if (self.monitoring_active and 
-            (not self.last_overall_summary_time or 
-             (datetime.now() - self.last_overall_summary_time).total_seconds() > 30)):
+            (not self.last_rolling_summary_time or 
+             (datetime.now() - self.last_rolling_summary_time).total_seconds() > 45)):
             # Run summary generation in background thread
-            summary_thread = threading.Thread(target=self._generate_overall_summary, daemon=True)
+            summary_thread = threading.Thread(target=self._generate_rolling_summary, daemon=True)
             summary_thread.start()
             
         # Schedule next update
@@ -718,7 +736,8 @@ Provide a natural, contextual summary of the current activity."""
     
     def run(self):
         """Start the GUI application"""
-        print("Starting Desktop Monitor GUI...")
+        if not self.config.MINIMAL_LOGGING:
+            print("Starting Desktop Monitor GUI with Enhanced Burst Capture...")
         self.root.mainloop()
 
 def main():
