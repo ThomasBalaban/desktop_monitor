@@ -41,14 +41,14 @@ class Config:
     BURST_CAPTURE_ENABLED = True     # Enable burst capture for fast action detection
     BURST_FRAME_COUNT = 5            # Number of frames to capture in burst sequence (extended)
     BURST_FRAME_INTERVAL = 0.3       # Seconds between burst frames (1.2s total span)
-    BURST_COOLDOWN = 2.0             # Minimum seconds between burst captures
+    BURST_COOLDOWN = 1.0             # Minimum seconds between burst captures
     
     # Monitor area configuration (auto-detected for Mac)
     MONITOR_AREA = {"left": 14, "top": 154, "width": 1222, "height": 685}
     
     # Enhanced LLM Vision models (burst capture only)
-    BURST_MODEL = "llava:7b"              # For burst frame analysis (LLaVA)
-    SUMMARY_MODEL = "mistral-nemo:latest" # For rolling summaries (Nemo)
+    BURST_MODEL = "ingu627/Qwen2.5-VL-7B-Instruct-Q5_K_M"              # For burst frame analysis
+    SUMMARY_MODEL = "mistral-nemo:latest" # For rolling summaries 
     
     # Enhanced LLM Vision processing
     MIN_FRAME_CHANGE = 0.10          # Minimum change threshold to process new frame
@@ -63,7 +63,7 @@ class Config:
     
     # Mac-specific optimizations
     MACOS_OPTIMIZATIONS = True       # Enable Mac-specific optimizations
-    MINIMAL_LOGGING = True           # Reduce console output (errors only)
+    MINIMAL_LOGGING= True           # Reduce console output (errors only)
     
     # Enhanced YOLO Configuration
     YOLO_MODEL = "yolov8n.pt"  # Options: yolov8n.pt (fastest), yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt (most accurate)

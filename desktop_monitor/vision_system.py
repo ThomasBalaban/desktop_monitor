@@ -1,8 +1,9 @@
 """
-Desktop Vision Monitoring System with Burst Capture
+Desktop Vision Monitoring System with Enhanced Burst Capture
 
 Enhanced version that captures multiple frames during fast action and maintains
-rolling summaries for better context understanding.
+rolling summaries for better context understanding. Now includes detailed
+character descriptions, environmental analysis, and scene change detection.
 """
 
 import cv2 # type: ignore
@@ -17,7 +18,7 @@ from collections import deque
 from typing import List, Tuple, Optional
 
 class VisionProcessor:
-    """Enhanced processor with burst capture and rolling summary capabilities"""
+    """Enhanced processor with burst capture and detailed character/scene analysis capabilities"""
     
     def __init__(self, config):
         self.config = config
@@ -42,11 +43,11 @@ class VisionProcessor:
             import ollama # type: ignore
             self.ollama = ollama
             
-            # Warmup LLaVA for burst analysis (suppress output)
+            # Warmup self.config.BURST_MODEL for burst analysis (suppress output)
             try:
-                self.ollama.generate(model="llava:7b", prompt="Ready", options={'num_predict': 1})
+                self.ollama.generate(model=config.BURST_MODEL, prompt="Ready", options={'num_predict': 1})
             except:
-                print(f"[VISION ERROR] Could not load llava:7b model")
+                print(f"[VISION ERROR] Could not load model")
                 raise
                 
             # Warmup Nemo for summaries
@@ -56,16 +57,15 @@ class VisionProcessor:
             print(f"[VISION ERROR] Failed to initialize Ollama: {e}")
             raise
             
-        # Burst analysis prompt (updated for 5 frames)
+        # Optimized burst analysis prompt for faster processing
         self.burst_analysis_prompt = """
-        Analyze this sequence of 5 frames captured 0.3 seconds apart during detected screen activity.
-        
-        Describe what's happening across these frames in 2-3 sentences:
-        - What action or activity is taking place
-        - How the scene evolves through the sequence
-        - The overall context (gaming, work, browsing, etc.)
-        
-        Focus on movement, transitions, and dynamic elements rather than static descriptions.
+        Analyze this 5-frame sequence (0.3s intervals) in detail. Provide a comprehensive description, aiming for 3-5 concise paragraphs or approximately 100-200 words. Focus on:
+
+        Character Analysis: Identify all people/characters present. Describe their appearance, clothing, approximate age/gender (if discernible), and specific actions or interactions within the scene. What are they doing, and how does it evolve across the frames?
+
+        Environmental Description: Detail the setting and environment. Is it an indoor or outdoor location? What objects, furniture, or features are visible? What is the overall context (e.g., office workspace, living room, gaming setup, outdoor activity)? Describe the general atmosphere.
+
+        Dynamic Changes and Scene Transitions: Clearly articulate what changes occur from frame to frame. Describe movement of objects or people, specific transitions (e.g., opening/closing, appearing/disappearing), and if the entire scene dramatically shifts, begin the description with "SCENE CHANGED -".
         """
         
     def optimize_frame(self, frame):
@@ -109,9 +109,53 @@ class VisionProcessor:
         
         return frames
     
+    def _enhance_frame_for_analysis(self, frame: Image.Image) -> Image.Image:
+        """Lightweight frame enhancement for faster processing"""
+        try:
+            # Skip enhancement for speed - just return original frame
+            # Only enhance if frame is very dark
+            frame_np = np.array(frame)
+            mean_brightness = np.mean(frame_np)
+            
+            if mean_brightness < 50:  # Only enhance very dark frames
+                alpha = 1.2
+                beta = 15
+                enhanced = np.clip(alpha * frame_np + beta, 0, 255).astype(np.uint8)
+                return Image.fromarray(enhanced)
+            
+            return frame
+            
+        except Exception as e:
+            return frame
+
+    def _post_process_burst_analysis(self, analysis_text: str) -> str:
+        """Post-process the analysis text for better readability and consistency"""
+        try:
+            # Clean up common formatting issues
+            analysis = analysis_text.strip()
+            
+            # Ensure proper sentence structure
+            if not analysis.endswith('.'):
+                analysis += '.'
+            
+            # Add timing context if not present
+            if 'frame' not in analysis.lower() and 'sequence' not in analysis.lower():
+                analysis = f"Burst sequence analysis: {analysis}"
+            
+            # Highlight scene changes
+            if 'scene chang' in analysis.lower():
+                analysis = analysis.replace('scene chang', '🔄 SCENE CHANG')
+                analysis = analysis.replace('SCENE CHANG', '🔄 SCENE CHANG')
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"[VISION] Post-processing failed: {e}")
+            return analysis_text
+    
     def analyze_frame(self, frames_list) -> Tuple[str, float]:
         """
-        Analyze burst sequence only (no single frame analysis)
+        Analyze burst sequence with enhanced character and scene analysis
         
         Args:
             frames_list: List of PIL Images from burst capture
@@ -134,42 +178,61 @@ class VisionProcessor:
             return error_msg, time.time() - start_time
     
     def _analyze_burst_frames(self, frames: List[Image.Image], start_time: float) -> Tuple[str, float]:
-        """Analyze a burst sequence of frames using LLaVA 7B"""
+        """Enhanced analyze a burst sequence of frames using self.config.BURST_MODEL with detailed character and scene analysis"""
         try:
-            # Prepare images for LLaVA
-            frame_images = [self.optimize_frame(frame) for frame in frames]
+            # Prepare images with enhanced processing
+            frame_images = []
             
-            # Use LLaVA 7B for multi-frame analysis
+            # Pre-process frames for better analysis
+            for i, frame in enumerate(frames):
+                # Optimize frame for character/scene recognition
+                processed_frame = self._enhance_frame_for_analysis(frame)
+                frame_b64 = self.optimize_frame(processed_frame)
+                frame_images.append(frame_b64)
+            
+            # Simplified prompt for faster processing
+            enhanced_prompt = f"""
+{self.burst_analysis_prompt}
+
+Sequence: 5 frames, 0.3s apart (1.2s total). Focus on people, actions, and any scene changes.
+"""
+            
             response = self.ollama.chat(
-                model="llava:7b",
+                model=self.config.BURST_MODEL,
                 messages=[{
                     "role": "user", 
-                    "content": self.burst_analysis_prompt, 
+                    "content": enhanced_prompt, 
                     "images": frame_images
                 }],
                 options={
-                    'temperature': 0.3,
-                    'num_ctx': 2048,
-                    'num_predict': 150
+                    'temperature': 0.5,  # Slightly higher for faster generation
+                    'num_predict': 1000, 
+                    'top_p': 0.95       # Simplified sampling
                 }
             )
             
             result = response['message']['content'].strip()
             process_time = time.time() - start_time
             
-            # Store in analysis history
+            # Post-process the result for better formatting
+            result = self._post_process_burst_analysis(result)
+            
+            # Store in analysis history with enhanced metadata
             self.analysis_history.append({
                 'type': 'burst',
                 'result': result,
                 'timestamp': time.time(),
                 'frames': len(frames),
-                'model': "llava:7b"
+                'model': self.config.BURST_MODEL,
+                'analysis_type': 'detailed_character_scene',
+                'frame_interval': 0.3,
+                'total_duration': len(frames) * 0.3
             })
             
             return result, process_time
             
         except Exception as e:
-            raise Exception(f"Burst frame analysis failed: {str(e)}")
+            raise Exception(f"Enhanced burst frame analysis failed: {str(e)}")
     
     def generate_rolling_summary(self):
         """Generate enhanced rolling summary from recent burst analyses"""
@@ -189,18 +252,13 @@ class VisionProcessor:
         else:
             return "No recent burst activity to summarize"
         
-        # Enhanced summary prompt
+        # Optimized summary prompt for faster processing
         summary_prompt = f"""
-        Analyze this sequence of desktop monitoring burst capture observations and provide a rolling summary.
+        Summarize recent desktop activity from these observations:
         
         {context_part}
         
-        Provide a 2-3 sentence summary that:
-        - Identifies the primary activity or context (gaming, work, browsing, etc.)
-        - Describes the overall progression or changes observed
-        - Captures the current state or focus
-        
-        Be specific about what the user appears to be doing rather than just describing interface elements.
+        In 2 sentences: Who is doing what, and in what context (work/gaming/etc)?
         """
         
         try:
@@ -208,8 +266,8 @@ class VisionProcessor:
                 model=self.config.SUMMARY_MODEL,
                 prompt=summary_prompt,
                 options={
-                    'temperature': 0.3, 
-                    'num_predict': 120,
+                    'temperature': 0.4, 
+                    'num_predict': 80,  # Reduced for faster summaries
                     'num_ctx': 2048
                 }
             )
@@ -248,7 +306,7 @@ class VisionProcessor:
                 self.last_summary_time = time.time()
 
 class DesktopVisionMonitor:
-    """Enhanced desktop vision monitoring with burst capture"""
+    """Enhanced desktop vision monitoring with burst capture and detailed character analysis"""
     
     def __init__(self, config):
         self.config = config
@@ -264,7 +322,7 @@ class DesktopVisionMonitor:
         cv2.ocl.setUseOpenCL(False)
         
     def start(self):
-        """Start enhanced desktop vision monitoring"""
+        """Start enhanced desktop vision monitoring with detailed character analysis"""
         self.running = True
         
         # Start summary worker thread
@@ -301,8 +359,13 @@ class DesktopVisionMonitor:
                                     # Capture burst sequence
                                     burst_frames = self.processor.capture_burst_sequence(frame, sct)
                                     
-                                    # Analyze the burst
+                                    # Analyze the burst with enhanced character/scene analysis
                                     result, process_time = self.processor.analyze_frame(burst_frames)
+                                    
+                                    # Display result with enhanced formatting
+                                    timestamp = time.strftime("%H:%M:%S")
+                                    if not self.config.MINIMAL_LOGGING:
+                                        print(f"[{timestamp} | {process_time:.1f}s] [BURST ANALYSIS] {result}")
                                     
                                     # For GUI: only show the first frame from the burst
                                     if hasattr(self.processor, '_gui_callback'):
@@ -312,12 +375,8 @@ class DesktopVisionMonitor:
                                     with self.processor.burst_lock:
                                         self.processor.burst_in_progress = False
                             else:
-                                # Single frame analysis (when in cooldown or burst in progress)
-                                result, process_time = self.processor.analyze_frame(frame)
-                                
-                                # For GUI callback
-                                if hasattr(self.processor, '_gui_callback'):
-                                    self.processor._gui_callback(frame, result, process_time)
+                                # Skip single frame analysis - only burst mode supported now
+                                pass
                         else:
                             # Small sleep when no changes detected
                             time.sleep(0.1)
@@ -329,12 +388,12 @@ class DesktopVisionMonitor:
                         time.sleep(1)
                         
         except Exception as e:
-            print(f"[VISION ERROR] Monitoring failed: {e}")
+            print(f"[VISION ERROR] Enhanced monitoring failed: {e}")
         finally:
             self.running = False
             
     def stop(self):
-        """Stop desktop vision monitoring"""
+        """Stop enhanced desktop vision monitoring"""
         self.running = False
         cv2.destroyAllWindows()
     
