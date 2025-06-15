@@ -39,12 +39,12 @@ class Config:
     
     # Burst Capture Configuration
     BURST_CAPTURE_ENABLED = True     # Enable burst capture for fast action detection
-    BURST_FRAME_COUNT = 3            # Number of frames to capture in burst sequence
-    BURST_FRAME_INTERVAL = 0.3       # Seconds between burst frames
+    BURST_FRAME_COUNT = 5            # Number of frames to capture in burst sequence (extended)
+    BURST_FRAME_INTERVAL = 0.3       # Seconds between burst frames (1.2s total span)
     BURST_COOLDOWN = 2.0             # Minimum seconds between burst captures
     
     # Monitor area configuration (auto-detected for Mac)
-    MONITOR_AREA = {"left": 15, "top": 155, "width": 1222, "height": 682}
+    MONITOR_AREA = {"left": 14, "top": 154, "width": 1222, "height": 685}
     
     # Enhanced LLM Vision models (burst capture only)
     BURST_MODEL = "llava:7b"              # For burst frame analysis (LLaVA)

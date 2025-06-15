@@ -56,13 +56,13 @@ class VisionProcessor:
             print(f"[VISION ERROR] Failed to initialize Ollama: {e}")
             raise
             
-        # Burst analysis prompt (no single frame prompt needed)
+        # Burst analysis prompt (updated for 5 frames)
         self.burst_analysis_prompt = """
-        Analyze this sequence of 3 frames captured 0.3 seconds apart during detected screen activity.
+        Analyze this sequence of 5 frames captured 0.3 seconds apart during detected screen activity.
         
         Describe what's happening across these frames in 2-3 sentences:
         - What action or activity is taking place
-        - How the scene changes between frames
+        - How the scene evolves through the sequence
         - The overall context (gaming, work, browsing, etc.)
         
         Focus on movement, transitions, and dynamic elements rather than static descriptions.
@@ -92,10 +92,10 @@ class VisionProcessor:
         return change_percent > self.config.MIN_FRAME_CHANGE
     
     def capture_burst_sequence(self, initial_frame: Image.Image, sct) -> List[Image.Image]:
-        """Capture a sequence of 3 frames spaced 0.3 seconds apart"""
+        """Capture a sequence of 5 frames spaced 0.3 seconds apart"""
         frames = [initial_frame]
         
-        for i in range(2):  # Capture 2 more frames (total of 3)
+        for i in range(4):  # Capture 4 more frames (total of 5)
             time.sleep(0.3)
             
             # Capture next frame
